@@ -2,15 +2,17 @@
   "nic": "eth0",
   "buttons": [
     {
-        "name": "Button name",
-        "mac":"ac:xx:xx:xx:xx:xx",
-        "url":"http://127.0.0.1:8080/request"
+      "name": "Button name",
+      "mac": "ac:xx:xx:xx:xx:xx",
+      "url": "http://127.0.0.1:8080/request",
+      "method": "POST"
     },
     {
-        "name": "Button name 2",
-        "mac":"ac:xx:xx:xx:xx:xx",
-        "url":"http://127.0.0.1:8080/request2",
-        "username":"username:password"
+      "name": "Button name 2",
+      "mac": "ac:xx:xx:xx:xx:xx",
+      "url": "http://127.0.0.1:8080/request2",
+      "method": "GET",
+      "username": "username:password"
     }
   ]
 }
