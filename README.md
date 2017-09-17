@@ -9,8 +9,8 @@ The program itself works well, but the Dockerfile and build for Raspberry Pi is 
 You should be able to compile it like this:
 
 ```
-git clone https://github.com/chrisgilbert/godash/
-cd godash/godash
+go get github.com/roberteinhaus/godash
+cd $GOROOT/src/github.com/roberteinhaus/godash
 go get github.com/google/gopacket
 go build
 ```

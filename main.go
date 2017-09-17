@@ -1,7 +1,5 @@
 package main
 
-// Made it use digest auth so I can trigger actions in Indigo. -dnewhall
-
 import (
 	"encoding/json"
 	"github.com/google/gopacket"
@@ -13,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"errors"
 )
 
 // Button is a Dash, from Amazon
@@ -21,6 +20,7 @@ type Button struct {
 	URL      string
 	Username string
 	MAC      string
+	Method	 string
 }
 
 // Configuration is Network Interface and Buttons.
@@ -61,10 +61,10 @@ func main() {
 		filter += "(ether src host " + MAC.String() + ")"
 	}
 	filter += ")"
-	capturePackates(configuration.NIC, filter, configuration.Buttons)
+	capturePackages(configuration.NIC, filter, configuration.Buttons)
 }
 
-func capturePackates(NIC string, filter string, buttons []Button) {
+func capturePackages(NIC string, filter string, buttons []Button) {
 	h, err := pcap.OpenLive(NIC, 65536, true, pcap.BlockForever)
 	defer h.Close()
 	if err != nil || h == nil {
@@ -86,7 +86,7 @@ func capturePackates(NIC string, filter string, buttons []Button) {
 		for _, button := range buttons {
 			if ethernetPacket.SrcMAC.String() == button.MAC {
 				log.Println("Button", button.Name, "was pressed.")
-				go makeRequest(button.URL, button.Username)
+				go makeRequest(button.URL, button.Username, button.Method)
 				break
 			}
 			log.Printf("Received button press, but don't know how to handle MAC[%v]\n", ethernetPacket.SrcMAC)
@@ -94,7 +94,7 @@ func capturePackates(NIC string, filter string, buttons []Button) {
 	}
 }
 
-func makeRequest(url string, username string) {
+func makeRequest(url string, username string, method string) {
 	var cmd *exec.Cmd
 	if username != "" {
 		// Adding digest auth to Go looked like hell. This was a lot easier.
@@ -107,22 +107,33 @@ func makeRequest(url string, username string) {
 			log.Println("Curl Output:", string(output))
 		}
 	} else {
-		// TODO: don't hard code this to POST nor JSON. Put them in the config file.
-		res, err := http.Post(url, "application/json", nil)
+		var res *http.Response
+		var err error
+
+		if method == "POST" {
+			res, err = http.Post(url, "application/json", nil)
+		} else if method == "GET" {
+			res, err = http.Get(url)
+		} else {
+			err = errors.New("not implemented method")
+		}
+
 		if err != nil {
-			log.Println("Error POSTing to URL", url, "->", err)
+			log.Println("Error requesting URL", url, "->", err)
 			return
 		}
+
 		defer func() {
 			// This is how you win the game of `errcheck`.
 			if err := res.Body.Close(); err != nil {
 				log.Println("Failed to close HTTP response body:", err)
 			}
 		}()
+
 		if output, err := ioutil.ReadAll(res.Body); err != nil {
-			log.Println("Error POSTing to URL", url, "->", err)
+			log.Println("Error requesting URL", url, "->", err)
 		} else {
-			log.Println("POST Output:", string(output))
+			log.Println("Result:", string(output))
 		}
 	}
 }
