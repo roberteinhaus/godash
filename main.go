@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -11,7 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"errors"
+	"strings"
 )
 
 // Button is a Dash, from Amazon
@@ -20,7 +21,9 @@ type Button struct {
 	URL      string
 	Username string
 	MAC      string
-	Method	 string
+	Method   string
+	Header   map[string]string
+	Data     map[string]string
 }
 
 // Configuration is Network Interface and Buttons.
@@ -39,7 +42,7 @@ func loadConfig() Configuration {
 	}
 	log.Println("Loaded", len(configuration.Buttons), "Button(s):")
 	for _, button := range configuration.Buttons {
-		log.Printf("- Button: %v (%v): %v\n", button.Name, button.MAC, button.URL)
+		log.Printf("- Button: %v (%v): %v, [%v], [%v]", button.Name, button.MAC, button.URL, button.Header, button.Data)
 	}
 	return configuration
 }
@@ -84,17 +87,16 @@ func capturePackages(NIC string, filter string, buttons []Button) {
 		ethernetLayer := packet.Layer(layers.LayerTypeEthernet)
 		ethernetPacket, _ := ethernetLayer.(*layers.Ethernet)
 		for _, button := range buttons {
-			if ethernetPacket.SrcMAC.String() == button.MAC {
+			if strings.ToUpper(ethernetPacket.SrcMAC.String()) == strings.ToUpper(button.MAC) {
 				log.Println("Button", button.Name, "was pressed.")
-				go makeRequest(button.URL, button.Username, button.Method)
+				go makeRequest(button.URL, button.Username, button.Method, button.Header, button.Data)
 				break
 			}
-			log.Printf("Received button press, but don't know how to handle MAC[%v]\n", ethernetPacket.SrcMAC)
 		}
 	}
 }
 
-func makeRequest(url string, username string, method string) {
+func makeRequest(url string, username string, method string, header map[string]string, data map[string]string) {
 	var cmd *exec.Cmd
 	if username != "" {
 		// Adding digest auth to Go looked like hell. This was a lot easier.
@@ -110,13 +112,25 @@ func makeRequest(url string, username string, method string) {
 		var res *http.Response
 		var err error
 
-		if method == "POST" {
-			res, err = http.Post(url, "application/json", nil)
-		} else if method == "GET" {
-			res, err = http.Get(url)
-		} else {
-			err = errors.New("not implemented method")
+		client := &http.Client{}
+
+		body, _ := json.Marshal(data)
+		if body != nil {
+			log.Printf("Sending data: %v", string(body))
 		}
+
+		req, err := http.NewRequest(method, url, bytes.NewReader(body))
+
+		if header != nil {
+			log.Println("Adding headers:")
+			for key, value := range header {
+				log.Println("    ", key, " -> ", value)
+				req.Header.Set(key, value)
+			}
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		res, err = client.Do(req)
 
 		if err != nil {
 			log.Println("Error requesting URL", url, "->", err)
